@@ -1,5 +1,6 @@
 // pages/game.tsx
 
+import { motion } from "framer-motion";
 import { useEffect, useState } from 'react';
 import { Card, createDeck, calculateHandValue } from '../lib/gameLogic';
 
@@ -8,20 +9,30 @@ const Game = () => {
   const [playerHand, setPlayerHand] = useState<Card[]>([]);
   const [dealerHand, setDealerHand] = useState<Card[]>([]);
   const [message, setMessage] = useState('');
+  const [balance, setBalance] = useState(1000);
+  const [bet, setBet] = useState(0);
+  const [hasBet, setHasBet] = useState(false);
 
   useEffect(() => {
-    startGame();
-  }, []);
+    if (hasBet) {
+      dealCards();
+    }
+  }, [hasBet]);
 
-  const startGame = () => {
+  const dealCards = () => {
     const newDeck = createDeck();
     const playerCards = [newDeck.pop()!, newDeck.pop()!];
     const dealerCards = [newDeck.pop()!, newDeck.pop()!];
 
     setDeck(newDeck);
-    setPlayerHand(playerCards);
-    setDealerHand(dealerCards);
-    setMessage('');
+    setPlayerHand([]);
+    setDealerHand([]);
+
+    setTimeout(() => setPlayerHand([playerCards[0]]), 200);
+    setTimeout(() => setDealerHand([dealerCards[0]]), 400);
+    setTimeout(() => setPlayerHand((prev) => [...prev, playerCards[1]]), 600);
+    setTimeout(() => setDealerHand((prev) => [...prev, dealerCards[1]]), 800);
+    setTimeout(() => setMessage(''), 1000);
   };
 
   const hit = () => {
@@ -29,13 +40,14 @@ const Game = () => {
 
     const newDeck = [...deck];
     const newCard = newDeck.pop()!;
-    const newPlayerHand = [...playerHand, newCard];
-
     setDeck(newDeck);
-    setPlayerHand(newPlayerHand);
+    setPlayerHand([...playerHand, newCard]);
 
-    if (calculateHandValue(newPlayerHand) > 21) {
+    if (calculateHandValue([...playerHand, newCard]) > 21) {
       setMessage('Bust! You lose.');
+      setBalance((prev) => prev - bet);
+      setHasBet(false);
+      setBet(0);
     }
   };
 
@@ -53,8 +65,10 @@ const Game = () => {
     let result = '';
     if (dealerTotal > 21 || playerTotal > dealerTotal) {
       result = 'You win!';
+      setBalance((prev) => prev + bet);
     } else if (playerTotal < dealerTotal) {
-      result = 'You lose!';
+      result = 'You lose.';
+      setBalance((prev) => prev - bet);
     } else {
       result = 'Push!';
     }
@@ -62,64 +76,188 @@ const Game = () => {
     setDeck(newDeck);
     setDealerHand(newDealerHand);
     setMessage(result);
+    setHasBet(false);
+    setBet(0);
   };
 
-  const renderCards = (hand: Card[]) =>
-  hand.map((card, i) =>
-    card?.value && card?.suit ? (
-      <span key={i} className="inline-block mx-1 p-2 border rounded bg-white shadow text-lg">
-        {card.value}{card.suit}
-      </span>
-    ) : (
-      <span key={i} className="inline-block mx-1 p-2 border rounded bg-gray-200 shadow text-lg">
-        ❓
-      </span>
-    )
-  );
+  const renderCards = (hand: Card[], faceDown?: boolean, type: 'player' | 'dealer' = 'player') =>
+    hand.map((card, i) => {
+      const isFaceDown = faceDown && i === 1;
+      return (
+        <motion.div
+          key={i}
+          initial={{ x: 300, y: -200, opacity: 0 }}
+          animate={{ x: 0, y: 0, opacity: 1 }}
+          transition={{ delay: i * 0.2, type: 'spring', stiffness: 100 }}
+          className={`relative inline-block mx-1 w-12 h-20 border rounded shadow ${
+            isFaceDown ? 'bg-pattern' : 'bg-white text-black'
+          }`}
+        >
+          {isFaceDown ? (
+  <div className="w-full h-full rounded bg-pattern border border-white" />
+) : (
+  <span className="absolute top-1 left-1 text-sm font-bold leading-none">
+    {card.value}
+    {card.suit}
+  </span>
+)}
 
+
+        </motion.div>
+      );
+    });
+  
+    const getChipsFromBet = (amount: number): { value: number; color: string }[] => {
+      const chipTypes = [
+        { value: 10, color: 'bg-purple-600' },
+        { value: 5, color: 'bg-red-600' },
+        { value: 1, color: 'bg-green-600' },
+        { value: 0.5, color: 'bg-blue-600' },
+        { value: 0.1, color: 'bg-yellow-400' }
+      ];
+    
+      const chips: { value: number; color: string }[] = [];
+      let remaining = amount;
+    
+      for (const chip of chipTypes) {
+        while (remaining >= chip.value - 0.001) {
+          chips.push(chip);
+          remaining -= chip.value;
+          remaining = Math.round(remaining * 1000) / 1000; // Prevent floating point weirdness
+        }
+      }
+    
+      return chips;
+    };      
 
   return (
-    <div className="p-6 text-center">
-      <h1 className="text-3xl font-bold mb-6">🃏 Blackjack</h1>
+    <div className="min-h-screen bg-gray-800 flex items-center justify-center">
+      <div className="relative w-[50vw] h-[75vh] bg-green-700 shadow-inner overflow-hidden rounded-b-full bg-felt text-white font-serif">
+        <div className="absolute top-4 left-6 bg-black bg-opacity-30 px-4 py-1 rounded text-yellow-300 font-bold">
+          Balance: ${balance}
+        </div>
 
-      <div className="mb-4">
-        <h2 className="font-semibold">Your Hand ({calculateHandValue(playerHand)})</h2>
-        <div>{renderCards(playerHand)}</div>
-      </div>
+        <div className="absolute top-4 right-6 w-12 h-20 rounded-sm shadow-md border border-white bg-pattern" />
 
-      <div className="mb-4">
-        <h2 className="font-semibold">Dealer's Hand ({message ? calculateHandValue(dealerHand) : '??'})</h2>
-        <div>
-          {message
-            ? renderCards(dealerHand)
-            : renderCards([dealerHand[0], { suit: '?', value: '?' }])}
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 text-center z-10">
+          <h2 className="font-semibold mb-2">
+            Dealer {message ? `(${calculateHandValue(dealerHand)})` : '(??)'}
+          </h2>
+          <div className="flex justify-center">{renderCards(dealerHand, !message, 'dealer')}</div>
+          <div className="text-xl font-extrabold tracking-wide mt-2 uppercase text-gray-100">ZOOT BLACKJACK</div>
+        </div>
+
+        <div className="absolute bottom-[18%] left-1/2 transform -translate-x-1/2 text-center z-10">
+          <h2 className="font-semibold mb-2">You ({calculateHandValue(playerHand)})</h2>
+          <div>{renderCards(playerHand, false, 'player')}</div>
+        </div>
+
+        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center gap-2">
+          {!hasBet && (
+            <>
+              <input
+                type="number"
+                min="1"
+                max={balance}
+                value={bet}
+                onChange={(e) => setBet(Number(e.target.value))}
+                className="w-32 px-2 py-1 rounded text-black text-center"
+                placeholder="Enter your bet"
+              />
+              <button
+                className="bg-yellow-500 text-black px-4 py-1 rounded hover:bg-yellow-600 font-semibold"
+                onClick={() => {
+                  if (bet > 0 && bet <= balance) {
+                  setHasBet(true);
+    }
+  }}
+>
+  Place Bet
+</button>
+
+            </>
+          )}
+
+          {hasBet && (
+            <div className="flex gap-4">
+              <button
+                className="bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
+                onClick={hit}
+                disabled={!!message}
+              >
+                Hit
+              </button>
+              <button
+                className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+                onClick={stand}
+                disabled={!!message}
+              >
+                Stand
+              </button>
+            </div>
+          )}
+        </div>
+
+        {message && (
+          <div className="absolute inset-x-0 bottom-0 text-center text-yellow-300 font-bold text-xl z-10 pb-2">
+            {message}
+          </div>
+        )}
+
+        <div className="absolute bottom-[24%] left-[20%] w-10 h-10 bg-gray-600 rounded-full opacity-30" />
+        {/* 🪙 Chip Stack (animated from player side) */}
+        {hasBet && (
+            <div className="absolute bottom-[1%] left-1/2 transform -translate-x-1/2 z-40 relative h-[100px] w-10 overflow-visible">
+            {getChipsFromBet(bet).map((chip, index) => (
+              <motion.div
+                key={index}
+                initial={{ y: 40, opacity: 0 }}
+                animate={{ y: index * -4, opacity: 1 }}
+                transition={{ delay: index * 0.05 }}
+                className={`absolute left-0 w-10 h-10 rounded-full border border-white ${chip.color} shadow-md`}
+                style={{ bottom: 0, zIndex: index + 1 }}
+              >
+                <div className="w-full h-full rounded-full" />
+              </motion.div>
+            ))}
+  </div>
+)}
+
+
+        <div className="absolute bottom-[14%] left-1/2 transform -translate-x-1/2 w-12 h-12 bg-gray-600 rounded-full opacity-70 border-2 border-white" />
+        <div className="absolute bottom-[24%] right-[20%] w-10 h-10 bg-gray-600 rounded-full opacity-30" />
+
+        <div className="absolute left-[6%] top-1/2 transform -translate-y-1/2 text-4xl text-white opacity-70">
+          ⚡
+        </div>
+        <div className="absolute right-[6%] top-1/2 transform -translate-y-1/2 text-4xl text-white opacity-70">
+          ⚡
         </div>
       </div>
 
-      <div className="space-x-4 mt-6">
-        <button
-          className="bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
-          onClick={hit}
-          disabled={!!message}
-        >
-          Hit
-        </button>
-        <button
-          className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
-          onClick={stand}
-          disabled={!!message}
-        >
-          Stand
-        </button>
-        <button
-          className="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
-          onClick={startGame}
-        >
-          Restart
-        </button>
-      </div>
-
-      {message && <div className="mt-6 text-xl font-bold">{message}</div>}
+      <style jsx>{`
+        .perspective {
+          perspective: 800px;
+        }
+        .backface-hidden {
+          backface-visibility: hidden;
+          transform-style: preserve-3d;
+        }
+        .bg-felt {
+          background-image: url("https://www.transparenttextures.com/patterns/felt.png");
+          background-size: 100px 100px;
+        }
+        .bg-pattern {
+          background-image: repeating-linear-gradient(
+            45deg,
+            #222 0,
+            #222 2px,
+            #333 2px,
+            #333 4px
+          );
+          background-size: 10px 10px;
+        }
+      `}</style>
     </div>
   );
 };
